@@ -2,14 +2,15 @@
 title: "Time to Containment and Area Burned by California Wildfires"
 subtitle: "A Simple Linear Regression Analysis"
 author: "Abtin Olaee"
-thanks: "Project repository available at: [INSERT GITHUB REPOSITORY URL]."
+thanks: "Project repository available at: https://github.com/DreamingBlues/261A-Project/."
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output:
   pdf_document:
     fig_caption: true
 # bibliography: references.bib
 abstract: |
-  [TODO: Add the abstract here. The rubric asks for three to five sentences describing the motivation, data, analysis, key findings, and implications.]
+  Understanding the factors associated with large fire perimeters is important for operational response and wildfire planning. In this study, we evaluate 8,476 California wildfire perimeter records from 2000 through 2025 and use simple linear regression to examine the relationship between time to containment and total area burned. The model demonstrated a positive association between the predictor and response variables; however, containment duration explained only 24.57% of the variation in log-transformed acreage. These results indicate that other variables also influence the total area burned and that containment duration alone is not enough to accurately predict a fire’s final size.
+  
 header-includes:
   - \usepackage{float}
 ---
@@ -39,7 +40,6 @@ The paper is organized as follows. We start by presenting the collected data, ou
 
 The dataset used in this project reports fire perimeters within California, as reported by the California Department of Forestry and Fire Protection's Fire and Resource Assessment Program (FRAP). Each observation is a mapped fire perimeter. This dataset is updated annually and contains mapped wildfire perimeters collected by CAL FIRE and cooperating agencies, including the United States Forest Service, Bureau of Land Management, California State Parks, National Park Service, and United States Fish and Wildlife Service. The complete dataset includes records of fires as far back as 1878; however, to narrow down this analysis and ensure high-quality data, we observe California fire records from 2000 through 2025.
 
-<!-- TODO: Add an in-text citation for the CAL FIRE dataset. -->
 
 The response variable we are looking at is the recorded fire perimeter, measured as GIS-Calculated Acres, which is the estimated area contained within each mapped fire perimeter. This variable represents the area burned rather than economic damage, structural damage, or fire suppression costs. The predictor variable of focus is time to containment, calculated as the number of calendar days between the alarm and containment dates. It is important to note that this measurement is not the exact time the fire was active; rather, it is the amount of time between the initial response to the fire and when the fire was reported as contained.
 
@@ -287,13 +287,13 @@ Overall, this analysis provides evidence of a positive association between time 
 
 # Discussion
 
-<!-- TODO: Complete the Discussion section. Briefly summarize the key findings, discuss weaknesses, and identify improvements, extensions, or future research. -->
+This analysis found a positive association between time to containment and total area burned by California wildfires. However, the model only explained about 24.57% of the variation. While longer containment durations were associated with larger fire perimeters, it alone is not enough to accurately predict the final size of every fire.  
 
 
 
 # References
 
-<!-- TODO: Add in-text citations and complete the reference list. When references.bib is ready, uncomment the bibliography line in the YAML header. -->
+https://lab.data.ca.gov/dataset/california-fire-perimeters-all
 
 
 
