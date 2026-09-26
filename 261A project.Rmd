@@ -1,0 +1,299 @@
+---
+title: "Time to Containment and Area Burned by California Wildfires"
+subtitle: "A Simple Linear Regression Analysis"
+author: "Abtin Olaee"
+thanks: "Project repository available at: [INSERT GITHUB REPOSITORY URL]."
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    fig_caption: true
+# bibliography: references.bib
+abstract: |
+  [TODO: Add the abstract here. The rubric asks for three to five sentences describing the motivation, data, analysis, key findings, and implications.]
+header-includes:
+  - \usepackage{float}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  fig.pos = "H"
+
+)
+```
+
+# Introduction
+
+The majority of California's most destructive wildfires have been recorded within the past 20 years. These include the 2018 Camp Fire, which was the deadliest and most destructive wildfire in California history, and, more recently, the 2025 Palisades and Eaton fires, which occurred unexpectedly and burned for over a month. These increasingly recent record-breaking fires highlight the severe wildfire impacts that can occur when fires burn over a sustained period of time.
+
+In addition to emergency response, continuous monitoring of fire spread is essential for firefighting systems. These systems are implemented as counteractive measures to reduce the spread of ignitions. Using data from previous fires is very important in the pursuit of estimating total fire damage and total area burned. Traditionally, firefighters respond to immediate threats and onsite actions; however, with the evolution of technologies such as satellite imagery, radar, and predictive modeling, we are able to better understand and anticipate the destruction caused by fires.
+
+Several studies have been conducted to evaluate the spread of fires and estimate the total damage using complex physical models of fires. However, these simulations are often computationally expensive and time-consuming. With the use of machine learning techniques, such as linear regression, we get a chance to learn from previously collected data on historical fires, which can be used to help interpret future fires. Therefore, this paper addresses the benefits of machine learning techniques to help firefighters predict the damage from fires. The research question is: Is time to containment associated with the total area burned by California wildfires recorded from 2000 through 2025? This will provide important institutions, such as utility companies, insurance companies, and public sectors, with information about what is to come so they can prepare for rebuilding after fires.
+
+The paper is organized as follows. We start by presenting the collected data, outlier observations, and methods of regression analysis. Then, we present the fitted model and lay out the comparison metrics. Finally, we examine the results and interpret how this model could help inform operational responses to wildfires.
+
+# Data
+
+The dataset used in this project reports fire perimeters within California, as reported by the California Department of Forestry and Fire Protection's Fire and Resource Assessment Program (FRAP). Each observation is a mapped fire perimeter. This dataset is updated annually and contains mapped wildfire perimeters collected by CAL FIRE and cooperating agencies, including the United States Forest Service, Bureau of Land Management, California State Parks, National Park Service, and United States Fish and Wildlife Service. The complete dataset includes records of fires as far back as 1878; however, to narrow down this analysis and ensure high-quality data, we observe California fire records from 2000 through 2025.
+
+<!-- TODO: Add an in-text citation for the CAL FIRE dataset. -->
+
+The response variable we are looking at is the recorded fire perimeter, measured as GIS-Calculated Acres, which is the estimated area contained within each mapped fire perimeter. This variable represents the area burned rather than economic damage, structural damage, or fire suppression costs. The predictor variable of focus is time to containment, calculated as the number of calendar days between the alarm and containment dates. It is important to note that this measurement is not the exact time the fire was active; rather, it is the amount of time between the initial response to the fire and when the fire was reported as contained.
+
+Cleaning this dataset is important because there are instances of missing observations, such as those without a recorded alarm or containment date. In addition, this dataset reports fires of all sizes, both large and small, including those that were contained on the same calendar day. After cleaning, the final dataset contained 8,476 fire perimeters. Of these observations, 3,891 had an alarm and containment date on the same calendar day and therefore had a recorded duration of zero days.
+
+```{r data-cleaning, results='hide'}
+data <- read.csv("./fire.csv")
+
+# Convert dates
+data$Alarm.Date <- as.Date(
+  data$Alarm.Date,
+  format = "%m/%d/%Y %I:%M:%S %p"
+)
+
+data$Containment.Date <- as.Date(
+  data$Containment.Date,
+  format = "%m/%d/%Y %I:%M:%S %p"
+)
+
+# Keep usable California fires from 2000 through 2025
+fire <- subset(
+  data,
+  State == "CA" &
+    Year >= 2000 &
+    Year <= 2025 &
+    !is.na(Alarm.Date) &
+    !is.na(Containment.Date) &
+    !is.na(GIS.Calculated.Acres) &
+    GIS.Calculated.Acres > 0
+)
+
+# Calculate time to containment
+fire$Duration <- as.numeric(
+  fire$Containment.Date - fire$Alarm.Date
+)
+
+# Remove impossible negative durations
+fire <- subset(fire, Duration >= 0)
+
+# Create log-transformed variables
+fire$Log.Acres <- log(fire$GIS.Calculated.Acres)
+fire$Log.Duration <- log(fire$Duration + 1)
+```
+
+```{r table-one}
+table1 <- data.frame(
+  Variable = c(
+    "Time to containment (days)",
+    "GIS-calculated acres"
+  ),
+  Observations = c(
+    length(fire$Duration),
+    length(fire$GIS.Calculated.Acres)
+  ),
+  Mean = round(c(
+    mean(fire$Duration),
+    mean(fire$GIS.Calculated.Acres)
+  ), 2),
+  SD = round(c(
+    sd(fire$Duration),
+    sd(fire$GIS.Calculated.Acres)
+  ), 2),
+  Median = round(c(
+    median(fire$Duration),
+    median(fire$GIS.Calculated.Acres)
+  ), 2),
+  Minimum = round(c(
+    min(fire$Duration),
+    min(fire$GIS.Calculated.Acres)
+  ), 2),
+  Maximum = round(c(
+    max(fire$Duration),
+    max(fire$GIS.Calculated.Acres)
+  ), 2)
+)
+
+knitr::kable(
+  table1,
+  row.names = FALSE,
+  caption = "Summary statistics for time to containment and GIS-calculated acres."
+)
+```
+
+Table 1 provides the distribution of the data; we can see how heavily skewed the fire perimeter data are. With a mean of 2,489.34 acres and a median of 41.60 acres, the data are very heavily right-skewed. This provides evidence for the use of a logarithmic transformation of GIS-calculated acres as the response variable for linear regression.
+
+Figure 1 compares the distributions of raw and log-transformed acreage. The raw acreage distribution is extremely right-skewed because most fires burned relatively few acres, while a small number of fires burned hundreds of thousands of acres. After applying the natural logarithm, the observations were distributed more evenly, and the influence of extremely large fires was reduced. Therefore, log-transformed acreage was used as the response variable.
+
+```{r acreage-distributions, fig.cap="Raw and log-transformed acreage distributions.", fig.width=10, fig.height=4.5}
+par(mfrow = c(1, 2))
+
+hist(
+  fire$GIS.Calculated.Acres,
+  breaks = 50,
+  main = "Distribution of Acres Burned",
+  xlab = "GIS-Calculated Acres"
+)
+
+hist(
+  fire$Log.Acres,
+  breaks = 50,
+  main = "Distribution of Log Acres",
+  xlab = "Log GIS-Calculated Acres"
+)
+
+par(mfrow = c(1, 1))
+```
+
+Several limitations should be considered when interpreting the data. This dataset does not contain every single wildfire in California's history, as some historical records were lost or insufficiently documented. However, the largest and most impactful fires have been accurately documented and rigorously verified. In addition, the collection methods can vary among reporting agencies. Lastly, this analysis focuses on time as the only predictor variable, although other variables, such as weather, fuel moisture, and topography, have been shown to play a significant role in fire perimeter area.
+
+
+# Methods
+
+Simple linear regression was used to examine the association between time to containment and total area burned by California wildfires. Let \(A_i\) represent the GIS-calculated acreage for fire perimeter \(i\), and let \(D_i\) represent the number of days between its alarm and containment dates. The final regression model was
+
+\[
+\log(A_i) = \beta_0 + \beta_1\log(D_i+1) + \varepsilon_i,
+\]
+
+where \(\beta_0\) is the expected log acreage when a fire has a recorded containment duration of zero days, \(\beta_1\) represents the association between containment duration and acreage, and \(\varepsilon_i\) is the random error for observation \(i\). The errors were assumed to have a mean of zero, constant variance \(\sigma^2\), and to be independent across observations.
+
+At first, a linear regression model was anticipated to be fitted to the untransformed data; however, with the strongly right-skewed distributions, it was apparent that the relationship would not appear to be linear. The use of the natural logarithm of acreage was necessary to properly fit the model to the response variable. In addition, the predictor was transformed using \(\log(D_i+1)\), where one was added to avoid issues that would arise from a calculated containment time of 0 days. These transformations allowed for accounting for outlier fires and helped produce a more linear relationship between the predictor and response. Because both variables were transformed, \(\beta_1\) can be interpreted as the approximate percentage change in acreage associated with a 1% increase in \(D_i+1\).
+
+The model parameters were estimated using ordinary least squares. This method chooses estimates \(b_0\) and \(b_1\) that minimize the sum of the squared residuals,
+
+\[
+\sum_{i=1}^{n}
+\left[
+\log(A_i)-\left\{b_0+b_1\log(D_i+1)\right\}
+\right]^2.
+\]
+
+A two-sided hypothesis test was used to test
+
+\[
+H_0:\beta_1=0
+\qquad\text{against}\qquad
+H_A:\beta_1\neq0.
+\]
+
+A 95% confidence interval was also constructed for \(\beta_1\). Model fit was summarized using \(R^2\), which represents the proportion of variation in log acreage explained by log-transformed containment duration, and the residual standard error.
+
+Several assumptions were analyzed before the final fitting of the model. A scatter plot of the transformed variables and a residual-versus-fitted plot were used to examine how linear the relationship appeared to be. The residual plot was also used to evaluate whether the errors had equal variance and to help identify unusual observations. A normal Q--Q plot was used to evaluate the normality of the residuals. From these visuals, we evaluated the improved linearity after the log transformations and the remaining departures from normality and equal variance.
+
+It is important to consider that while our results may show correlation, this does not establish a set relationship. There is more variability that goes into fire spread that cannot be covered by the scope of this project, and independence is impossible, as fires respond to overlapping changes in the environment. This model is only capable of measuring association. The primary goal of this analysis is to describe the association between containment duration and area burned. Containment duration is a factor not known until the fire has already been contained; therefore, it cannot be used as a predictor during the beginning of the active fire's life span.
+
+All data cleaning, model fitting, tables, and figures were completed in R, and the simple linear regression model was fitted using the `lm()` function.
+
+```{r fit-model, results='hide'}
+model <- lm(Log.Acres ~ Log.Duration, data = fire)
+```
+
+# Results
+
+Our results display a positive relationship between our predictor variable and the response variable. As seen in Figure 2, the relationship between log-transformed time to containment and log-transformed acreage shows a positive relationship with substantial variation around the fitted line. It is apparent that fires with similar containment durations could sometimes have considerably different burned areas, indicating that containment duration alone cannot fully explain fire sizes.
+
+```{r duration-and-acreage, fig.cap="Log-transformed time to containment and log-transformed acreage, with the fitted regression line.", fig.width=7, fig.height=5}
+plot(
+  fire$Log.Duration,
+  fire$Log.Acres,
+  pch = 16,
+  cex = 0.4,
+  col = rgb(0, 0, 0, 0.2),
+  xlab = "Log(Time to Containment + 1)",
+  ylab = "Log GIS-Calculated Acres",
+  main = "Containment Duration and Area Burned"
+)
+
+abline(model, col = "red", lwd = 2)
+```
+
+
+
+The fitted regression equation is shown in Table 2 and is
+
+\[
+\widehat{\log(A_i)} = 2.8688 + 1.0206\log(D_i+1),
+\]
+
+where \(A_i\) is GIS-calculated acreage and \(D_i\) is time to containment in days.
+
+```{r table-two}
+coefficients <- summary(model)$coefficients
+confidence_intervals <- confint(model)
+
+table2 <- data.frame(
+  Term = c("Intercept", "Log(Duration + 1)"),
+  Estimate = round(coefficients[, "Estimate"], 4),
+  `Standard Error` = round(coefficients[, "Std. Error"], 4),
+  `t-value` = round(coefficients[, "t value"], 2),
+  `95% Confidence Interval` = paste0(
+    "(",
+    round(confidence_intervals[, 1], 4),
+    ", ",
+    round(confidence_intervals[, 2], 4),
+    ")"
+  ),
+  `p-value` = format.pval(
+    coefficients[, "Pr(>|t|)"],
+    digits = 3,
+    eps = 0.001
+  ),
+  check.names = FALSE
+)
+
+knitr::kable(
+  table2,
+  row.names = FALSE,
+  caption = "Estimated coefficients for the simple linear regression model."
+)
+```
+
+The estimated slope indicates that a 1% increase in \(D_i+1\) was associated with an approximately 1.02% increase in predicted area burned. The intercept indicates that a fire with a recorded duration of zero days had a predicted log acreage of 2.8688, or about 17.6 acres. Furthermore, the model had an \(R^2\) value of 0.2457, meaning that approximately 24.57% of the variation in log acreage was explained by log-transformed containment duration. The remaining 75.43% was not explained by the model and may reflect other factors, such as weather, vegetation, and topography, that were not included in the analysis.
+
+Further examining the performance of this model, Figure 3 shows the residuals plotted against the fitted values. The residuals were generally distributed above and below zero without a clear curved pattern, further indicating a linear relationship after the log transformations. The vertical groups of observations at the lower end occurred because time to containment was measured in whole days, causing many fires to have the same predictor value. Lastly, the spread of the residuals was not completely constant across the fitted values, particularly near the lower and upper ends of the plot. This indicates that the equal variance assumption was not fully met.
+
+```{r residuals-versus-fitted, fig.cap="Residuals plotted against fitted values for the regression model.", fig.width=7, fig.height=5}
+plot(
+  fitted(model),
+  residuals(model),
+  pch = 16,
+  cex = 0.4,
+  col = rgb(0, 0, 0, 0.2),
+  xlab = "Fitted Values",
+  ylab = "Residuals",
+  main = "Residuals versus Fitted Values"
+)
+
+abline(h = 0, col = "red", lwd = 2)
+```
+
+Figure 4 demonstrates the normal quantile--quantile plot of the residuals. Most of the observations near the center of the distribution followed the reference line. However, the lower tail diverged from the fitted line, demonstrating that the residuals were not completely normally distributed. This indicates that some fires burned much less acreage than the model predicted. However, since the dataset contains a large number of observations, these departures are unlikely to negatively affect the overall regression line to a significant extent, but they should be considered when thinking about uncertainty.
+
+```{r normal-qq-plot, fig.cap="Normal Q--Q plot of the regression residuals.", fig.width=7, fig.height=5}
+qqnorm(
+  residuals(model),
+  pch = 16,
+  cex = 0.4,
+  main = "Normal Q-Q Plot of Residuals"
+)
+
+qqline(residuals(model), col = "red", lwd = 2)
+```
+
+Overall, this analysis provides evidence of a positive association between time to containment and total area burned. In summary, longer containment durations were associated with larger fire perimeters, but containment duration was not enough to accurately predict the final size of every fire.
+
+# Discussion
+
+<!-- TODO: Complete the Discussion section. Briefly summarize the key findings, discuss weaknesses, and identify improvements, extensions, or future research. -->
+
+
+
+# References
+
+<!-- TODO: Add in-text citations and complete the reference list. When references.bib is ready, uncomment the bibliography line in the YAML header. -->
+
+
+
